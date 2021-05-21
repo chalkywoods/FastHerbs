@@ -1,0 +1,30 @@
+# TouchyThing ################################################################
+
+TouchyThing is a WiFi connected pager providing visual cues when you recieve notifications on your phone. 
+
+*I might have misinterpreted the assignment a bit! I assumed we had to make something useful rather than following the requirements literally. However, I think I still implemented the 3 essential points + optional ones so hopefully thats fine.*
+
+## Requirements
+
+- An internet connected WiFi network.
+- An IFTTT account, and the IFTTT app on your phone for notifications.
+
+*Pretty complicated, but unfortunately I didnt think about this until late in development.*
+- A static IP address or [dynamic dns server](https://www.noip.com/).
+- Network firewall port 54321 forwarded to TouchyThing.
+
+[joinme](https://github.com/hamishcunningham/fishy-wifi/tree/master/ardesp/waterelf32)
+
+## Setup
+
+1. Plug TouchyThing into a power source via using USB.
+2. Connect to WiFi: Wait a couple of seconds for startup. Using your phone, connect to the TouchyThing access point and open the web browser. Select the wifi network for TouchyThing to connect to and provide a password.
+3. Create IFTTT applets: Any 'This' can be used. 'That' should be a webhook GET request to `http://<static_ip_or_domain>:54321/notify?colour=<colour>`, where colour is red, yellow or green depending on the notification LED to flash.
+
+## Usage
+When you recieve a notification or event defined in IFTTT, the LED of that colour will begin to slowly flash. As you receive more notifications the flashing speed increases. To clear notifcations for an LED, simply touch the cable attached to it.
+
+Once initial setup is complete, TouchyThing will connect to WiFi automatically on startup.
+
+TouchyThing automatically installs the latest firmware whenever it is restarted.
+

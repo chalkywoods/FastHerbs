@@ -1,0 +1,8 @@
+.pio
+.vscode
+sdkconfig.old
+local-sdks
+build
+logs
+sdkconfig
+main/private.h
