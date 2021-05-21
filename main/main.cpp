@@ -1,8 +1,9 @@
 // main.cpp
-int firmwareVersion = 1;
+int firmwareVersion = 4;
 
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
+#include <freertos/FreeRTOS.h>
 #include "joinme-2021.h" // Provisioning and OTA update - taken from COM3505 exercises.
 #include "private.h" // not for pushing; assumed to be at parent dir level
 
@@ -37,6 +38,10 @@ String apPassword = _DEFAULT_AP_KEY;
 int redLED = 16;
 int yellowLED = 17;
 int greenLED = 21;
+
+// Function prototypes
+void flash(void *);
+void provisionAndUpdate(void *);
 
 /////////////////////////////////////////////////////////////////////////////
 // arduino-land entry points
@@ -73,14 +78,79 @@ void setup() {
   pinMode(redLED, OUTPUT);
   pinMode(yellowLED, OUTPUT);
   pinMode(greenLED, OUTPUT);
+
+  // Start tasks
+  // xTaskCreate(
+  //   provisionAndUpdate,    // Function that should be called
+  //   "Provision WiFi and OTA",   // Name of the task (for debugging)
+  //   4096,            // Stack size (bytes)
+  //   NULL,            // Parameter to pass
+  //   1,               // Task priority
+  //   NULL             // Task handle
+  // );
+  dln(startupDBG, "Starting tasks");
+
+  xTaskCreate(
+    flash,    // Function that should be called
+    "Flash red",   // Name of the task (for debugging)
+    1000,            // Stack size (bytes)
+    (void*)&redLED,  // Parameter to pass
+    2,               // Task priority
+    NULL             // Task handle
+  );
+
+  xTaskCreate(
+    flash,    // Function that should be called
+    "Flash yellow",   // Name of the task (for debugging)
+    1000,            // Stack size (bytes)
+    (void*)&yellowLED,            // Parameter to pass
+    2,               // Task priority
+    NULL             // Task handle
+  );
+  dln(startupDBG, "All tasks started");
 } // setup
 
 void loop() {
-  digitalWrite(redLED, HIGH);
-  WAIT_A_SEC;
-  digitalWrite(redLED, LOW);
-  WAIT_A_SEC;
+  vTaskDelay(10/portTICK_PERIOD_MS);
 } // loop
+
+void flash(void *parameter) {
+  int pin = *((int*)parameter);
+  Serial.println(pin);
+  for(;;){
+    digitalWrite(pin, HIGH);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    digitalWrite(pin, LOW);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+}
+
+void provisionAndUpdate(void * parameter) {
+  getMAC(MAC_ADDRESS);
+  Serial.printf("\nsetup...\nESP32 MAC = %s\n", MAC_ADDRESS);
+  apSSID.concat(MAC_ADDRESS);
+  // WiFi provisioning or connection
+  Serial.printf("doing wifi manager\n");
+  webServer = joinmeManageWiFi(apSSID.c_str(), apPassword.c_str()); // connect
+  Serial.printf("wifi manager done\n\n");
+  Serial.print("AP SSID: ");
+  Serial.print(apSSID);
+  Serial.print("; IP address(es): local=");
+  Serial.print(WiFi.localIP());
+  Serial.print("; AP=");
+  Serial.println(WiFi.softAPIP());
+
+  // check for and perform firmware updates as needed
+  Serial.printf("firmware is at version %d\n", firmwareVersion);
+  vTaskDelay(500 / portTICK_PERIOD_MS); // let wifi settle
+  joinmeOTAUpdate(
+    firmwareVersion, _GITLAB_PROJ_ID,
+    // "", // for publ repo "" works, else need valid PAT: _GITLAB_TOKEN,
+    _GITLAB_TOKEN,
+    "ProjectThing%2Ffirmware%2F"
+  );
+  vTaskDelete(NULL);
+}
 
 void getMAC(char *buf) { // the MAC is 6 bytes, so needs careful conversion...
                          // taken from COM3505 ecercises
