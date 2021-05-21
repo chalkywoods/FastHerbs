@@ -1,5 +1,5 @@
 // main.cpp
-int firmwareVersion = 4;
+int firmwareVersion = 5;
 
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
@@ -55,24 +55,6 @@ void setup() {
   apSSID.concat(MAC_ADDRESS);
   // WiFi provisioning or connection
   Serial.printf("doing wifi manager\n");
-  webServer = joinmeManageWiFi(apSSID.c_str(), apPassword.c_str()); // connect
-  Serial.printf("wifi manager done\n\n");
-  Serial.print("AP SSID: ");
-  Serial.print(apSSID);
-  Serial.print("; IP address(es): local=");
-  Serial.print(WiFi.localIP());
-  Serial.print("; AP=");
-  Serial.println(WiFi.softAPIP());
-
-  // check for and perform firmware updates as needed
-  Serial.printf("firmware is at version %d\n", firmwareVersion);
-  vTaskDelay(2000 / portTICK_PERIOD_MS); // let wifi settle
-  joinmeOTAUpdate(
-    firmwareVersion, _GITLAB_PROJ_ID,
-    // "", // for publ repo "" works, else need valid PAT: _GITLAB_TOKEN,
-    _GITLAB_TOKEN,
-    "ProjectThing%2Ffirmware%2F"
-  );
 
   // Set up leds
   pinMode(redLED, OUTPUT);
@@ -89,6 +71,15 @@ void setup() {
   //   NULL             // Task handle
   // );
   dln(startupDBG, "Starting tasks");
+
+  xTaskCreate(
+    provisionAndUpdate,
+    "Provision wifi",
+    6144,
+    NULL,
+    3,
+    NULL
+  );
 
   xTaskCreate(
     flash,    // Function that should be called
@@ -125,12 +116,7 @@ void flash(void *parameter) {
   }
 }
 
-void provisionAndUpdate(void * parameter) {
-  getMAC(MAC_ADDRESS);
-  Serial.printf("\nsetup...\nESP32 MAC = %s\n", MAC_ADDRESS);
-  apSSID.concat(MAC_ADDRESS);
-  // WiFi provisioning or connection
-  Serial.printf("doing wifi manager\n");
+void provisionAndUpdate(void *parameter) {
   webServer = joinmeManageWiFi(apSSID.c_str(), apPassword.c_str()); // connect
   Serial.printf("wifi manager done\n\n");
   Serial.print("AP SSID: ");
@@ -142,7 +128,7 @@ void provisionAndUpdate(void * parameter) {
 
   // check for and perform firmware updates as needed
   Serial.printf("firmware is at version %d\n", firmwareVersion);
-  vTaskDelay(500 / portTICK_PERIOD_MS); // let wifi settle
+  vTaskDelay(2000 / portTICK_PERIOD_MS); // let wifi settle
   joinmeOTAUpdate(
     firmwareVersion, _GITLAB_PROJ_ID,
     // "", // for publ repo "" works, else need valid PAT: _GITLAB_TOKEN,
