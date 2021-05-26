@@ -1,6 +1,7 @@
 // main.cpp
-int firmwareVersion = 5;
+int firmwareVersion = 6;
 
+#include <Wire.h>
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
 #include <freertos/FreeRTOS.h>
@@ -34,21 +35,33 @@ String apPassword = _DEFAULT_AP_KEY;
 
 #define ECHECK ESP_ERROR_CHECK_WITHOUT_ABORT
 
-// LED pins
-int redLED = 16;
-int yellowLED = 17;
-int greenLED = 21;
+// pump pins
+int pump1 = 21;
+
+// constants
+int cap_thresh = 375;
+int pump_time = 4;
+int poll_time = 10;
 
 // Function prototypes
-void flash(void *);
+void pump(int, int);
 void provisionAndUpdate(void *);
+unsigned int readI2CRegister16bit(int, int);
+void writeI2CRegister8bit(int, int);
+void readSensors(void *);
+
+// SensorHandle
+TaskHandle_t sensorHandle = NULL;
 
 /////////////////////////////////////////////////////////////////////////////
 // arduino-land entry points
 
 void setup() {
   dln(startupDBG, "\nsetup ProjectThing");
+  Wire.begin();
+  Wire.setClock(100000);
   Serial.begin(115200);
+  writeI2CRegister8bit(0x20, 6); //reset sensor
   Serial.println("arduino started");
   getMAC(MAC_ADDRESS);
   Serial.printf("\nsetup...\nESP32 MAC = %s\n", MAC_ADDRESS);
@@ -57,19 +70,8 @@ void setup() {
   Serial.printf("doing wifi manager\n");
 
   // Set up leds
-  pinMode(redLED, OUTPUT);
-  pinMode(yellowLED, OUTPUT);
-  pinMode(greenLED, OUTPUT);
+  pinMode(pump1, OUTPUT);
 
-  // Start tasks
-  // xTaskCreate(
-  //   provisionAndUpdate,    // Function that should be called
-  //   "Provision WiFi and OTA",   // Name of the task (for debugging)
-  //   4096,            // Stack size (bytes)
-  //   NULL,            // Parameter to pass
-  //   1,               // Task priority
-  //   NULL             // Task handle
-  // );
   dln(startupDBG, "Starting tasks");
 
   xTaskCreate(
@@ -82,39 +84,20 @@ void setup() {
   );
 
   xTaskCreate(
-    flash,    // Function that should be called
-    "Flash red",   // Name of the task (for debugging)
-    1000,            // Stack size (bytes)
-    (void*)&redLED,  // Parameter to pass
+    readSensors,    // Function that should be called
+    "Read water sensor",   // Name of the task (for debugging)
+    2048,            // Stack size (bytes)
+    NULL,  // Parameter to pass
     2,               // Task priority
-    NULL             // Task handle
+    &sensorHandle             // Task handle
   );
 
-  xTaskCreate(
-    flash,    // Function that should be called
-    "Flash yellow",   // Name of the task (for debugging)
-    1000,            // Stack size (bytes)
-    (void*)&yellowLED,            // Parameter to pass
-    2,               // Task priority
-    NULL             // Task handle
-  );
   dln(startupDBG, "All tasks started");
 } // setup
 
 void loop() {
-  vTaskDelay(10/portTICK_PERIOD_MS);
+  vTaskDelay(50/portTICK_PERIOD_MS);
 } // loop
-
-void flash(void *parameter) {
-  int pin = *((int*)parameter);
-  Serial.println(pin);
-  for(;;){
-    digitalWrite(pin, HIGH);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    digitalWrite(pin, LOW);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-  }
-}
 
 void provisionAndUpdate(void *parameter) {
   webServer = joinmeManageWiFi(apSSID.c_str(), apPassword.c_str()); // connect
@@ -150,6 +133,55 @@ void getMAC(char *buf) { // the MAC is 6 bytes, so needs careful conversion...
     buf[i + 1] = rev[j];
   }
   buf[12] = '\0';
+}
+
+void writeI2CRegister8bit(int addr, int value) {
+  Wire.beginTransmission(addr);
+  Wire.write(value);
+  Wire.endTransmission();
+}
+
+unsigned int readI2CRegister16bit(int addr, int reg) {
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  Wire.endTransmission();
+  vTaskDelay(50/portTICK_PERIOD_MS);  
+  Wire.requestFrom(addr, 2);
+  unsigned int t = Wire.read() << 8;
+  t = t | Wire.read();
+  return t;
+}
+
+unsigned int readI2CRegister8bit(int addr, int reg) {
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  Wire.endTransmission(); 
+  vTaskDelay(10/portTICK_PERIOD_MS);
+  Wire.requestFrom(addr, 1);
+  unsigned int t = Wire.read();
+  return t;
+}
+
+void pump(int pin, int time) {
+  digitalWrite(pin, HIGH);
+  vTaskDelay(time * 1000 / portTICK_PERIOD_MS);
+  digitalWrite(pin, LOW);
+}
+
+void readSensors(void *parameter) {
+  unsigned int cap_val;
+  vTaskDelay(2000 / portTICK_PERIOD_MS);
+  for(;;){
+    cap_val = readI2CRegister16bit(0x20, 0); //read capacitance register
+    Serial.println(cap_val); 
+    if (cap_val > 500) {
+      cap_val = cap_thresh;
+    };
+    if (cap_val < cap_thresh) {
+      pump(pump1, pump_time);
+    };
+    vTaskDelay(poll_time * 1000 / portTICK_PERIOD_MS);
+  }
 }
 
 /////////////////////////////////////////////////////////////////////////////
