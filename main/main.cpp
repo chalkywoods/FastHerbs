@@ -1,12 +1,15 @@
 // main.cpp
-int firmwareVersion = 6;
+int firmwareVersion = 7;
 
 #include <Wire.h>
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
 #include <freertos/FreeRTOS.h>
+#include "time.h"
 #include "joinme-2021.h" // Provisioning and OTA update - taken from COM3505 exercises.
 #include "private.h" // not for pushing; assumed to be at parent dir level
+#include <SPIFFS.h> // Filesystem for webpages
+#include "RunningMedian.h"
 
 // setting different DBGs true triggers prints
 #define dbg(b, s)       if(b) Serial.print(s)
@@ -28,6 +31,11 @@ void getMAC(char *);
 String apSSID = String("ProjectThing-"); // SSID of the AP
 String apPassword = _DEFAULT_AP_KEY;
 
+//NTP variables
+const char* ntpServer = "pool.ntp.org";
+const long  gmtOffset_sec = 0;
+const int   daylightOffset_sec = 3600;
+
 // delay/yield macros
 #define WAIT_A_SEC   vTaskDelay(    1000/portTICK_PERIOD_MS); // 1 second
 #define WAIT_SECS(n) vTaskDelay((n*1000)/portTICK_PERIOD_MS); // n seconds
@@ -35,49 +43,87 @@ String apPassword = _DEFAULT_AP_KEY;
 
 #define ECHECK ESP_ERROR_CHECK_WITHOUT_ABORT
 
+// Web server
+AsyncWebServer* plantServer;
+void initPlantServer();
+void hndlIndex(AsyncWebServerRequest *);
+void hndlMoisture(AsyncWebServerRequest *);
+void hndlLight(AsyncWebServerRequest *);
+void hndlNotFound(AsyncWebServerRequest *);
+
 // pump pins
 int pump1 = 21;
 
 // constants
 int cap_thresh = 375;
 int pump_time = 4;
-int poll_time = 10;
+int poll_time = 3;
+int active_start = 1000;
+int active_stop = 2200;
+unsigned int ntpUpdateTime = 6;
+
+// Median filter light and moisture measurements, WiFi interferes with i2c
+RunningMedian moisture = RunningMedian(3);
+RunningMedian light = RunningMedian(5);
+int curr_moisture = cap_thresh;
+int curr_light = 0;
 
 // Function prototypes
 void pump(int, int);
-void provisionAndUpdate(void *);
+void provisionAndUpdate();
 unsigned int readI2CRegister16bit(int, int);
+unsigned int readI2CRegister8bit(int, int);
 void writeI2CRegister8bit(int, int);
 void readSensors(void *);
+void updateTime(void *);
+bool isActive();
+unsigned int getMoisture(int);
+unsigned int getLight(int);
 
 // SensorHandle
 TaskHandle_t sensorHandle = NULL;
+
+// I2C Mutex
+SemaphoreHandle_t i2cMutex = xSemaphoreCreateMutex();
 
 /////////////////////////////////////////////////////////////////////////////
 // arduino-land entry points
 
 void setup() {
+  Serial.begin(115200);
+  Serial.println("arduino started");
   dln(startupDBG, "\nsetup ProjectThing");
   Wire.begin();
   Wire.setClock(100000);
-  Serial.begin(115200);
   writeI2CRegister8bit(0x20, 6); //reset sensor
-  Serial.println("arduino started");
   getMAC(MAC_ADDRESS);
   Serial.printf("\nsetup...\nESP32 MAC = %s\n", MAC_ADDRESS);
   apSSID.concat(MAC_ADDRESS);
   // WiFi provisioning or connection
   Serial.printf("doing wifi manager\n");
+  provisionAndUpdate();
 
   // Set up leds
   pinMode(pump1, OUTPUT);
 
+  // Config ntp
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  // Mount filesystem
+  if(!SPIFFS.begin()){
+    Serial.println("An Error has occurred while mounting SPIFFS");
+    return;
+  }
+
+  // Start server
+  initPlantServer();
+
   dln(startupDBG, "Starting tasks");
 
   xTaskCreate(
-    provisionAndUpdate,
-    "Provision wifi",
-    6144,
+    updateTime,
+    "Update time",
+    2048,
     NULL,
     3,
     NULL
@@ -99,7 +145,7 @@ void loop() {
   vTaskDelay(50/portTICK_PERIOD_MS);
 } // loop
 
-void provisionAndUpdate(void *parameter) {
+void provisionAndUpdate() {
   webServer = joinmeManageWiFi(apSSID.c_str(), apPassword.c_str()); // connect
   Serial.printf("wifi manager done\n\n");
   Serial.print("AP SSID: ");
@@ -118,7 +164,6 @@ void provisionAndUpdate(void *parameter) {
     _GITLAB_TOKEN,
     "ProjectThing%2Ffirmware%2F"
   );
-  vTaskDelete(NULL);
 }
 
 void getMAC(char *buf) { // the MAC is 6 bytes, so needs careful conversion...
@@ -135,13 +180,16 @@ void getMAC(char *buf) { // the MAC is 6 bytes, so needs careful conversion...
   buf[12] = '\0';
 }
 
-void writeI2CRegister8bit(int addr, int value) {
+void writeI2CRegister8bit(int addr, int reg) {
+  xSemaphoreTake(i2cMutex, ( TickType_t ) 0);
   Wire.beginTransmission(addr);
-  Wire.write(value);
+  Wire.write(reg);
   Wire.endTransmission();
+  xSemaphoreGive(i2cMutex);
 }
 
 unsigned int readI2CRegister16bit(int addr, int reg) {
+  xSemaphoreTake(i2cMutex, ( TickType_t ) 0);
   Wire.beginTransmission(addr);
   Wire.write(reg);
   Wire.endTransmission();
@@ -149,17 +197,40 @@ unsigned int readI2CRegister16bit(int addr, int reg) {
   Wire.requestFrom(addr, 2);
   unsigned int t = Wire.read() << 8;
   t = t | Wire.read();
+  xSemaphoreGive(i2cMutex);
   return t;
 }
 
 unsigned int readI2CRegister8bit(int addr, int reg) {
+  xSemaphoreTake(i2cMutex, ( TickType_t ) 0);
   Wire.beginTransmission(addr);
   Wire.write(reg);
-  Wire.endTransmission(); 
-  vTaskDelay(10/portTICK_PERIOD_MS);
+  Wire.endTransmission();
+  vTaskDelay(50/portTICK_PERIOD_MS);   
   Wire.requestFrom(addr, 1);
   unsigned int t = Wire.read();
+  xSemaphoreGive(i2cMutex);
   return t;
+}
+
+unsigned int getMoisture(int addr) {
+  unsigned int reading = 0;
+  reading = readI2CRegister16bit(addr, 0);
+  if (reading > 0) {
+    moisture.add(reading);
+  }
+  return moisture.getLowest();
+}
+
+unsigned int getLight(int addr) {
+  unsigned int reading = 0;
+  writeI2CRegister8bit(addr, 3);
+  vTaskDelay(2000 / portTICK_PERIOD_MS);
+  reading = readI2CRegister16bit(addr, 4);
+  if (reading > 0) {
+    light.add(reading);
+  }
+  return light.getMedian();
 }
 
 void pump(int pin, int time) {
@@ -169,18 +240,61 @@ void pump(int pin, int time) {
 }
 
 void readSensors(void *parameter) {
-  unsigned int cap_val;
   vTaskDelay(2000 / portTICK_PERIOD_MS);
   for(;;){
-    cap_val = readI2CRegister16bit(0x20, 0); //read capacitance register
-    Serial.println(cap_val); 
-    if (cap_val > 500) {
-      cap_val = cap_thresh;
-    };
-    if (cap_val < cap_thresh) {
+    curr_light = getMoisture(0x20);    // When the firmware wants light AND moisture, the registers
+    curr_moisture = getLight(0x20);    // swap round for some reason?
+    Serial.println((String)"Moisture: " + curr_moisture + (String)" | Light: " + curr_light);
+    if (curr_moisture < cap_thresh && isActive()) {
       pump(pump1, pump_time);
     };
     vTaskDelay(poll_time * 1000 / portTICK_PERIOD_MS);
+  }
+}
+
+bool isActive() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("Failed to obtain time");
+    return false;
+  } else if (curr_light > 10000) {
+    Serial.println("Sensors initialising");
+    return false;
+  } else {
+    int hour = (100 * timeinfo.tm_hour) + timeinfo.tm_min;
+    Serial.println(hour);
+    return (hour > active_start && hour < active_stop);
+  }
+}
+
+void initPlantServer() { // changed naming conventions to avoid clash with Ex06
+  // register callbacks to handle different paths
+  plantServer = new AsyncWebServer(80);
+  plantServer->on("/", hndlIndex);              // slash
+  plantServer->on("/moisture", hndlMoisture);   // moisture
+  plantServer->on("/light", hndlLight);         // light
+  plantServer->onNotFound(hndlNotFound);        // 404s...
+
+  plantServer->begin();
+  dln(startupDBG, "HTTP server started");
+}
+
+void hndlIndex(AsyncWebServerRequest *request){
+  request->send(SPIFFS, "/index.html");
+}
+
+void hndlMoisture(AsyncWebServerRequest *request){
+  request->send_P(200, "text/plain", ((String)curr_moisture).c_str());
+}
+
+void hndlLight(AsyncWebServerRequest *request){
+  request->send_P(200, "text/plain", ((String)curr_light).c_str());
+}
+
+void updateTime(void *parameter){
+  for(;;){
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    vTaskDelay(ntpUpdateTime*3600000 / portTICK_PERIOD_MS);
   }
 }
 

@@ -1,30 +1,64 @@
-# TouchyThing ################################################################
+# FastHerbs ################################################################
 
-TouchyThing is a WiFi connected pager providing visual cues when you recieve notifications on your phone. 
+FastHerbs is an ambitious attempt to build a portable autonomous hyroponic herb garden. The long term goal is to have it mounted on the roof rack of my 1981 campervan, Tubby, and travel the world!. As a result, it needs to be capable of speeds of 80 MPH, travel over rough terrain, and operable anywhere from the Sahara to the Arctic circle. Internet connection will frequently be unavailable, but solar panels and leisure batteries will ensure enough power for logic and water pumping. Power for heating/lighting may be more difficult.
 
-*I might have misinterpreted the assignment a bit! I assumed we had to make something useful rather than following the requirements literally. However, I think I still implemented the 3 essential points + optional ones so hopefully thats fine.*
+Time will tell if I'm able to achieve any or all of these constraints!
+
+For COM3505 I will be implementing automatic watering of some houseplants whilst keeping the above constraints in mind. Due to extenuating circumstances I didn't have enough time to grow any new plants or learn about hydroponic nutrients, so the plants are in soil and I'm only using tap water.
 
 ## Requirements
 
-- An internet connected WiFi network.
-- An IFTTT account, and the IFTTT app on your phone for notifications.
+- A WiFi network to monitor measurements.
+- A 12v power supply
+- A 5v micro USB power supply
+- Some water
+- A thirsty plant!
 
-*Pretty complicated, but unfortunately I didnt think about this until late in development.*
-- A static IP address or [dynamic dns server](https://www.noip.com/).
-- Network firewall port 54321 forwarded to TouchyThing.
+## Build and Install
 
-[joinme](https://github.com/hamishcunningham/fishy-wifi/tree/master/ardesp/waterelf32)
+ProjectThing has been developed using PlatformIO on Ubuntu. To install the toolchain used during development:
+
+Install VSCode.
+Install the PlatformIO extension for VSCode.
+Install the Espressif 32 platform via PlatformIO library manager.
+
+To build and flash ProjectThing:
+
+Clone this repository.
+Navigate to the ProjectThing directory.
+Plug in the ESP32 Feather
+From the PlatformIO CLI:
+Build the filesystem: `pio run -t buildfs`.
+Flash the filesystem: `pio run -t uploadfs`.
+Flash the firmware: `pio run -t upload`.
+To monitor serial output: `pio device monitor`.
 
 ## Setup
 
-1. Plug TouchyThing into a power source via using USB.
-2. Connect to WiFi: Wait a couple of seconds for startup. Using your phone, connect to the TouchyThing access point and open the web browser. Select the wifi network for TouchyThing to connect to and provide a password.
-3. Create IFTTT applets: Any 'This' can be used. 'That' should be a webhook GET request to `http://<static_ip_or_domain>:54321/notify?colour=<colour>`, where colour is red, yellow or green depending on the notification LED to flash.
+1. Place the water hose into the centre of your plant pot, and place the soil moisture sensor into the soil up to the white line, 2-3 cm away from the hose.
+2. Place the other end of the hose into a water source.
+2. Plug the USB into the ESP32 microcontroller, and the 12v power supply into the breadboard and earth rails.
+3. Connect to WiFi using [joinme](https://github.com/hamishcunningham/fishy-wifi/tree/master/ardesp/waterelf32): Wait a couple of seconds for startup. Using your phone, connect to the ProjectThing access point and open the web browser. Select the wifi network to connect to and provide a password.
 
 ## Usage
-When you recieve a notification or event defined in IFTTT, the LED of that colour will begin to slowly flash. As you receive more notifications the flashing speed increases. To clear notifcations for an LED, simply touch the cable attached to it.
 
-Once initial setup is complete, TouchyThing will connect to WiFi automatically on startup.
+The soil sensor will measure soil moisture content and water your plant whenever it dips below a certain threhsold. As some pumps may be noisy, watering will be paused between 10pm and 10am.
 
-TouchyThing automatically installs the latest firmware whenever it is restarted.
+To see live stats, connect to the IP address given on the serial output during initialisation. Graphs of light and moisture measurements are shown
 
+Once initial setup is complete, TouchyThing will connect to WiFi automatically on startup and install the latest firmware using [joinme](https://github.com/hamishcunningham/fishy-wifi/tree/master/ardesp/waterelf32).
+
+## Hardware
+
+TouchyThing uses an Adafruit HUZZAH32 ESP32 Feather Board. A 12v peristaltic pump is used for watering, swtched by an RFP30N06LE logic level MOSFET. A diode is used in parallel with the pump to protect the rest of the circuit from back EMF generated when the pump is switched off.
+
+Sensing is provided by a capacitance based soil moisture sensor, based on the open source [Chirp!](https://wemakethings.net/chirp/), and interfaced over I2C. The exact sensor I used came from Amazon and was undocumented, but came with a number of nasty surprises, and after some digging others have had the same issues:
+* I spent a while trying to get data from the thermometer, but it turns out there isn't one.
+* When measuring light or moisture, the register mapping follows the [spec](https://github.com/Miceuz/i2c-moisture-sensor). However, if you try to read both without turning the whole system off in between, the registers for light and moisture swap around! As I am reading both, my code confusingly gets light using `getMoisture()`, and moisture using `getLight()`.
+* The code provided by the vendor for changing addresses does not work, nor does the one for Chirp. I've bricked 2 of my sensors and haven't been able to find a way to change address :(. I wanted to have this system watering multiple plants but it looks like I will have to order some better sensors.
+
+## Development notes
+
+As this system is expected to grow in complexity, some design decisions are probably overkill for a simple single plant waterer. After setup everything runs on FreeRTOS to help scheduling and prioritising tasks. I2C communication is protected by mutex as I intend to add more sensors in the future.
+
+Interferance has been an issue. A median filter on both the moisture and light readings filter out high erroneous reading produced whenever wifi is active. A decoupling capacitor would probaly help with this but I didn't have any on hand. Also, using the pump permanently breaks usb serial communication! I might be able to filter this interferance out further, or use a relay instead of MOSFET for switching as my pumps aren't powerful enough to need PWM speed control.
