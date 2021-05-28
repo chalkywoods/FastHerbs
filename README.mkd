@@ -48,11 +48,11 @@ The soil sensor will measure soil moisture content and water your plant whenever
 
 To see live stats, connect to the IP address given on the serial output during initialisation. Graphs of light and moisture measurements are shown
 
-Once initial setup is complete, TouchyThing will connect to WiFi automatically on startup and install the latest firmware using [joinme](https://github.com/hamishcunningham/fishy-wifi/tree/master/ardesp/waterelf32).
+Once initial setup is complete, ProjectThing will connect to WiFi automatically on startup and install the latest firmware using [joinme](https://github.com/hamishcunningham/fishy-wifi/tree/master/ardesp/waterelf32).
 
 ## Hardware
 
-TouchyThing uses an Adafruit HUZZAH32 ESP32 Feather Board. A 12v peristaltic pump is used for watering, swtched by an RFP30N06LE logic level MOSFET. A diode is used in parallel with the pump to protect the rest of the circuit from back EMF generated when the pump is switched off.
+ProjectThing uses an Adafruit HUZZAH32 ESP32 Feather Board. A 12v peristaltic pump is used for watering, swtched by an RFP30N06LE logic level MOSFET. A diode is used in parallel with the pump to protect the rest of the circuit from back EMF generated when the pump is switched off.
 
 Sensing is provided by a capacitance based soil moisture sensor, based on the open source [Chirp!](https://wemakethings.net/chirp/), and interfaced over I2C. The exact sensor I used came from Amazon and was undocumented, but came with a number of nasty surprises, and after some digging others have had the same issues:
 * I spent a while trying to get data from the thermometer, but it turns out there isn't one.
