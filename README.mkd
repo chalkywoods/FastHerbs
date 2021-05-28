@@ -56,10 +56,14 @@ Once initial setup is complete, ProjectThing will connect to WiFi automatically 
 
 ProjectThing uses an Adafruit HUZZAH32 ESP32 Feather Board. A 12v peristaltic pump is used for watering, swtched by an RFP30N06LE logic level MOSFET. A diode is used in parallel with the pump to protect the rest of the circuit from back EMF generated when the pump is switched off.
 
+![Controller](./images/controller.jpg "Controller")
+![Pump](./images/water.jpg "Pump")
+
 Sensing is provided by a capacitance based soil moisture sensor, based on the open source [Chirp!](https://wemakethings.net/chirp/), and interfaced over I2C. The exact sensor I used came from Amazon and was undocumented, but came with a number of nasty surprises, and after some digging others have had the same issues:
 * I spent a while trying to get data from the thermometer, but it turns out there isn't one.
 * When measuring light or moisture, the register mapping follows the [spec](https://github.com/Miceuz/i2c-moisture-sensor). However, if you try to read both without turning the whole system off in between, the registers for light and moisture swap around! As I am reading both, my code confusingly gets light using `getMoisture()`, and moisture using `getLight()`.
 * The code provided by the vendor for changing addresses does not work, nor does the one for Chirp. I've bricked 2 of my sensors and haven't been able to find a way to change address :(. I wanted to have this system watering multiple plants but it looks like I will have to order some better sensors.
+![Sensor](./images/plant.jpg "Sensor")
 
 ## Development notes
 
