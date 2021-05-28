@@ -50,6 +50,8 @@ To see live stats, connect to the IP address given on the serial output during i
 
 Once initial setup is complete, ProjectThing will connect to WiFi automatically on startup and install the latest firmware using [joinme](https://github.com/hamishcunningham/fishy-wifi/tree/master/ardesp/waterelf32).
 
+[Demonstration video (University of Sheffield)](https://drive.google.com/file/d/1i4qprEhYB8Pcl_Vph9ZsoMsAcUjQT9YU/view?usp=sharing)
+
 ## Hardware
 
 ProjectThing uses an Adafruit HUZZAH32 ESP32 Feather Board. A 12v peristaltic pump is used for watering, swtched by an RFP30N06LE logic level MOSFET. A diode is used in parallel with the pump to protect the rest of the circuit from back EMF generated when the pump is switched off.
