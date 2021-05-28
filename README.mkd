@@ -4,7 +4,9 @@ FastHerbs is an ambitious attempt to build a portable autonomous hyroponic herb 
 
 Time will tell if I'm able to achieve any or all of these constraints!
 
-For COM3505 I will be implementing automatic watering of some houseplants whilst keeping the above long term goals in mind. Due to extenuating circumstances I didn't have enough time to grow any new plants or learn about hydroponic nutrients, so the plants are in soil and I'm only using tap water.
+For COM3505 I will be implementing automatic watering of some houseplants whilst keeping the above long term goals in mind. 
+
+*Due to extenuating circumstances I completed this all in 4 consecutive days, including ordering parts. I didn't have enough time to grow any new plants or learn about hydroponic nutrients, so the plants are in soil and I'm only using tap water. By the time I had identified issues with hardware or realised I needed some extra bits, it was too late to have them arrive in time, so there are a couple of areas that need more polish!*
 
 ## Requirements
 
