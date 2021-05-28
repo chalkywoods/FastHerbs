@@ -48,6 +48,8 @@ The soil sensor will measure soil moisture content and water your plant whenever
 
 To see live stats, connect to the IP address given on the serial output during initialisation. Graphs of light and moisture measurements are shown
 
+![Graphs](./images/graphs.jpg "Graphs")
+
 Once initial setup is complete, ProjectThing will connect to WiFi automatically on startup and install the latest firmware using [joinme](https://github.com/hamishcunningham/fishy-wifi/tree/master/ardesp/waterelf32).
 
 [Demonstration video (University of Sheffield)](https://drive.google.com/file/d/1i4qprEhYB8Pcl_Vph9ZsoMsAcUjQT9YU/view?usp=sharing)
