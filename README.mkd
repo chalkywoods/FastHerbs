@@ -4,7 +4,7 @@ FastHerbs is an ambitious attempt to build a portable autonomous hyroponic herb 
 
 Time will tell if I'm able to achieve any or all of these constraints!
 
-For COM3505 I will be implementing automatic watering of some houseplants whilst keeping the above constraints in mind. Due to extenuating circumstances I didn't have enough time to grow any new plants or learn about hydroponic nutrients, so the plants are in soil and I'm only using tap water.
+For COM3505 I will be implementing automatic watering of some houseplants whilst keeping the above long term goals in mind. Due to extenuating circumstances I didn't have enough time to grow any new plants or learn about hydroponic nutrients, so the plants are in soil and I'm only using tap water.
 
 ## Requirements
 
@@ -18,20 +18,20 @@ For COM3505 I will be implementing automatic watering of some houseplants whilst
 
 ProjectThing has been developed using PlatformIO on Ubuntu. To install the toolchain used during development:
 
-Install VSCode.
-Install the PlatformIO extension for VSCode.
-Install the Espressif 32 platform via PlatformIO library manager.
+1. Install VSCode.
+2. Install the PlatformIO extension for VSCode.
+3. Install the Espressif 32 platform via PlatformIO library manager.
 
 To build and flash ProjectThing:
 
-Clone this repository.
-Navigate to the ProjectThing directory.
-Plug in the ESP32 Feather
-From the PlatformIO CLI:
-Build the filesystem: `pio run -t buildfs`.
-Flash the filesystem: `pio run -t uploadfs`.
-Flash the firmware: `pio run -t upload`.
-To monitor serial output: `pio device monitor`.
+1. Clone this repository.
+2. Navigate to the ProjectThing directory.
+3. Plug in the ESP32 Feather
+4. From the PlatformIO CLI:
+5. Build the filesystem: `pio run -t buildfs`.
+6. Flash the filesystem: `pio run -t uploadfs`.
+7. Flash the firmware: `pio run -t upload`.
+8. To monitor serial output: `pio device monitor`.
 
 ## Setup
 
@@ -61,4 +61,75 @@ Sensing is provided by a capacitance based soil moisture sensor, based on the op
 
 As this system is expected to grow in complexity, some design decisions are probably overkill for a simple single plant waterer. After setup everything runs on FreeRTOS to help scheduling and prioritising tasks. I2C communication is protected by mutex as I intend to add more sensors in the future.
 
-Interferance has been an issue. A median filter on both the moisture and light readings filter out high erroneous reading produced whenever wifi is active. A decoupling capacitor would probaly help with this but I didn't have any on hand. Also, using the pump permanently breaks usb serial communication! I might be able to filter this interferance out further, or use a relay instead of MOSFET for switching as my pumps aren't powerful enough to need PWM speed control.
+Interference has been an issue. A median filter on both the moisture and light readings filter out the high erroneous readings produced whenever wifi is active. Decoupling capacitors would probaly help with this but I didn't have any on hand. Also, using the pump permanently breaks usb serial communication! I might be able to filter this interference out further, or use a relay instead of MOSFET for switching as my pumps aren't powerful enough to need PWM speed control.
+
+## Serial output transcript
+
+When TouchyThing is plugged into a computer, run `pio device monitor` to monitor output
+- Power on and attempt connection:
+
+```
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:2
+load:0x3fff0030,len:1252
+load:0x40078000,len:12692
+load:0x40080400,len:3100
+entry 0x400805ec
+�arduino started
+
+setup ProjectThing
+
+setup...
+ESP32 MAC = 807D3AF03AFC
+
+doing wifi manager
+[   148][E][WiFiSTA.cpp:252] begin(): connect failed! 0x300a
+```
+
+- Can't find WiFi credentials, start provisioning server:
+```
+connecting to wifi...AP SSID: ProjectThing-807D3AF03AFC; IP address(es): local=0.0.0.0; AP=192.168.4.1
+setting up a web server
+HTTP server started
+joinme will direct captured clients to: 192.168.4.1
+joinme captive dns server started
+............................................................
+................serving page at /wifi
+.........................................................scan done: 6 networks found
+................................................serving page at /wifichz
+..................................serving page at /status.......serving page at /status
+............................wifi manager done
+```
+
+- Got WiFi connection, check for new firmware and check for update:
+```
+AP SSID: ProjectThing-807D3AF03AFC; IP address(es): local=192.168.68.121; AP=192.168.4.1
+firmware is at version 7
+checking for firmware updates...
+joinmeCloudGet, url = https://gitlab.com/api/v4/projects/24597141/repository/files/ProjectThing%2Ffirmware%2Fversion/raw?private_token=<<PRIVATE_TOKEN>>&ref=master
+firmware is up to date
+```
+
+- No update needed, start tasks!
+```
+HTTP server started
+Starting tasks
+All tasks started
+```
+
+- Start measuring. The sensor takes forever to stabilise, so the first few readings are wrong. 
+```
+Moisture: 1888 | Light: 65535
+Moisture: 1889 | Light: 65535
+Moisture: 1888 | Light: 65535
+Moisture: 1875 | Light: 17151
+Moisture: 1863 | Light: 17151
+Moisture: 493 | Light: 1850
+Moisture: 492 | Light: 1850
+Moisture: 493 | Light: 1821
+Moisture: 492 | Light: 1800
+Moisture: 493 | Light: 1798
+Moisture: 492 | Light: 1739
+```
