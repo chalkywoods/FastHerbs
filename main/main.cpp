@@ -28,7 +28,7 @@ char MAC_ADDRESS[13]; // MAC addresses are 12 chars, plus the NULL terminator
 void getMAC(char *);
 
 // wifi access point 
-String apSSID = String("ProjectThing-"); // SSID of the AP
+String apSSID = String("TubNet-garden-"); // SSID of the AP
 String apPassword = _DEFAULT_AP_KEY;
 
 //NTP variables
@@ -94,7 +94,7 @@ SemaphoreHandle_t i2cMutex = xSemaphoreCreateMutex();
 void setup() {
   Serial.begin(115200);
   Serial.println("arduino started");
-  dln(startupDBG, "\nsetup ProjectThing");
+  dln(startupDBG, "\nsetup TubNet-garden");
   Wire.begin();
   Wire.setClock(100000);
   writeI2CRegister8bit(0x20, 6); //reset sensor
@@ -164,7 +164,7 @@ void provisionAndUpdate() {
     firmwareVersion, _GITLAB_PROJ_ID,
     // "", // for publ repo "" works, else need valid PAT: _GITLAB_TOKEN,
     _GITLAB_TOKEN,
-    "ProjectThing%2Ffirmware%2F"
+    "firmware%2F"
   );
 }
 

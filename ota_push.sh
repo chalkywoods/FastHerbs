@@ -10,7 +10,7 @@ echo "firmware copied"
 $(echo "$NEWVER" > ./firmware/version)
 echo "committing"
 $(git add ./firmware)
-$(git commit -m "Update ProjectThing firmware from $VER to $NEWVER")
+$(git commit -m "Update firmware from $VER to $NEWVER")
 echo "pushing"
 $(git push)
 echo "complete"
