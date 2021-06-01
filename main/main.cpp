@@ -1,5 +1,5 @@
 // main.cpp
-int firmwareVersion = 7;
+int firmwareVersion = 8;
 
 #include <Wire.h>
 #include <Arduino.h>
@@ -55,12 +55,14 @@ void hndlNotFound(AsyncWebServerRequest *);
 int pump1 = 21;
 
 // constants
-int cap_thresh = 375;
+int cap_thresh = 435;
 int pump_time = 4;
 int poll_time = 3;
 int active_start = 1000;
 int active_stop = 2200;
 unsigned int ntpUpdateTime = 6;
+
+unsigned int pollCount = 0;
 
 // Median filter light and moisture measurements, WiFi interferes with i2c
 RunningMedian moisture = RunningMedian(3);
@@ -242,13 +244,16 @@ void pump(int pin, int time) {
 void readSensors(void *parameter) {
   vTaskDelay(2000 / portTICK_PERIOD_MS);
   for(;;){
-    curr_light = getMoisture(0x20);    // When the firmware wants light AND moisture, the registers
-    curr_moisture = getLight(0x20);    // swap round for some reason?
+    if (isActive()) {
+      curr_light = getMoisture(0x20);    // When the firmware wants light AND moisture, the registers
+    }
+    curr_moisture = getLight(0x20);      // swap round for some reason?
     Serial.println((String)"Moisture: " + curr_moisture + (String)" | Light: " + curr_light);
-    if (curr_moisture < cap_thresh && isActive()) {
+    if (curr_moisture < cap_thresh && isActive() && pollCount > 10) {
       pump(pump1, pump_time);
     };
     vTaskDelay(poll_time * 1000 / portTICK_PERIOD_MS);
+    pollCount ++;
   }
 }
 
@@ -256,9 +261,6 @@ bool isActive() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
     Serial.println("Failed to obtain time");
-    return false;
-  } else if (curr_light > 10000) {
-    Serial.println("Sensors initialising");
     return false;
   } else {
     int hour = (100 * timeinfo.tm_hour) + timeinfo.tm_min;
